@@ -23,6 +23,16 @@ html, body {
     display: none;
 }
 
+.defaultVideo {
+    width: auto;
+    height: 100%;
+    min-width: 100vw;
+    aspect-ratio: 16/9;
+    object-fit: cover;
+    object-position: top center;
+    display: none;
+}
+
 .dg {
     margin: 0 !important;
 }
@@ -46,16 +56,19 @@ html, body {
 }
 
 .container {
+    display: flex;
+    justify-content: center;   /* horizontal centering */
+    align-items: flex-start;   /* top alignment */
     width: 100vw;
     height: 100vh;
-    margin: 0;
-    padding: 0;
-    position: relative;
+    overflow: hidden;
 }
 
 canvas {
-    width: 100vw;
     height: 100vh;
+    width: auto;
+    min-width: 100vw;
+    aspect-ratio: 16/9;
     display: block;
     background: #000;
     margin: 0;
