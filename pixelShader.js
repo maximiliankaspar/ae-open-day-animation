@@ -1,10 +1,3 @@
-/*
-To do:
-Add more palettes
-Add function / hotkey to randomize inputs
-Simplify color palette input / closest color distance functions
-*/
-
 // DOM Elements
 const canvas = document.getElementById('canvas');
 const gl = canvas.getContext('webgl', {preserveDrawingBuffer: false}) || canvas.getContext('experimental-webgl');
