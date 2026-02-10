@@ -26,7 +26,7 @@ let paletteNames = ["field","underwater","forest","flame","dusk","grayscale",
   "vampire","ink","galaxy","acid","sand"];
 
 let obj = {
-  pixelSize: 20,
+  pixelSize: 18,
   ditherFactor: 0.20,
   colorPalette: "acid",
   edgeThreshold: 0.3,
