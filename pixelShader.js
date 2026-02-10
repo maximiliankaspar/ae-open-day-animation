@@ -16,6 +16,30 @@ let defaultVideoWidth = 900;
 let defaultVideoHeight = 504;
 let maxCanvasWidth = 1200;
 
+
+
+function applyCanvasCover() {
+  const container = document.querySelector('.container');
+  if (!container) return;
+
+  const cw = container.clientWidth;
+  const ch = container.clientHeight;
+
+  const iw = canvas.width || 1;
+  const ih = canvas.height || 1;
+
+  const scale = Math.max(cw / iw, ch / ih);
+
+  canvas.style.width = (iw * scale) + 'px';
+  canvas.style.height = (ih * scale) + 'px';
+  canvas.style.left = '50%';
+  canvas.style.top = '50%';
+  canvas.style.transform = 'translate(-50%, -50%)';
+}
+
+window.addEventListener('resize', applyCanvasCover);
+window.addEventListener('orientationchange', applyCanvasCover);
+
 if (!gl) {
   alert('WebGL not supported');
   throw new Error('WebGL not supported');
@@ -602,6 +626,7 @@ async function setupWebcam() {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       gl.viewport(0, 0, canvas.width, canvas.height);
+      applyCanvasCover();
       
       return video;
   } catch (err) {
@@ -705,6 +730,7 @@ function startDefaultVideo(){
   defaultVideo.play();
 
   gl.viewport(0, 0, canvas.width, canvas.height);
+  applyCanvasCover();
   playAnimationToggle = true;
 
   currentVideo = defaultVideo;
@@ -764,4 +790,5 @@ function randomizeInputs(){
 }
 
 //MAIN METHOD
+applyCanvasCover();
 setInterval(startDefaultVideo(),1000);
