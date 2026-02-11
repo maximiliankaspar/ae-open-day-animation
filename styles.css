@@ -71,7 +71,7 @@ canvas {
     top: 50%;
     transform: translate(-50%, -50%);
     display: block;
-    background: #000;
+    background: #fff;
     margin: 0;
     padding: 0;
 }
