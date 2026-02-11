@@ -251,9 +251,16 @@ const vertexShaderSource = `
 `;
 
 const fragmentShaderSource = `
+
     precision mediump float;
     varying vec2 vTexCoord;
     uniform sampler2D uTexture;
+    // Cursor trail mask (alpha channel)
+    uniform sampler2D uTrail;
+    uniform vec2 trailResolution;
+    uniform vec2 trailScale;
+    uniform float cursorDitherBoost;
+    uniform float uTime;
     uniform vec2 resolution;
     uniform float pixelSize;
     uniform float ditherFactor;
@@ -482,6 +489,13 @@ const fragmentShaderSource = `
         }
     }
 
+
+    float hash21(vec2 p){
+        p = fract(p*vec2(123.34, 345.45));
+        p += dot(p, p+34.345);
+        return fract(p.x*p.y);
+    }
+
     void main() {
         vec2 pixelatedCoord = floor(vTexCoord * resolution / pixelSize) * pixelSize / resolution;
         vec4 color = texture2D(uTexture, pixelatedCoord);
@@ -501,6 +515,25 @@ const fragmentShaderSource = `
         
         // Find the closest color in the palette for the adjusted color
         vec3 quantizedColor = findClosestColor(adjustedColor);
+
+
+                // --- Cursor trail (grid-aligned mask in cell space) ---
+                vec2 cell = floor(vTexCoord * resolution / pixelSize);
+                vec2 trailUV = (cell * trailScale + 0.5) / trailResolution;
+                float trailA = texture2D(uTrail, trailUV).a;
+
+                // Binary mask (keeps pixels crisp)
+                float trailMask = step(0.5, trailA);
+
+                // Fixed pink accent (same spirit as old)
+                vec3 trailColor = vec3(0.902, 0.380, 0.863);
+
+                // Small temporal variation like old (subtle)
+                float pulse = 0.85 + 0.15 * sin(uTime * 2.0 + hash21(cell) * 6.283);
+
+                float trailStrength = trailMask * cursorDitherBoost * pulse;
+
+                quantizedColor = mix(quantizedColor, trailColor, trailStrength);
 
         // Apply edge highlighting
         if (isEdge) {
@@ -570,6 +603,12 @@ const paletteChoiceLocation = gl.getUniformLocation(program, 'paletteChoice');
 const edgeThresholdLocation = gl.getUniformLocation(program, 'edgeThreshold');
 const edgeIntensityLocation = gl.getUniformLocation(program, 'edgeIntensity');
 const edgeColorLocation = gl.getUniformLocation(program, 'edgeColor');
+const uTextureLocation = gl.getUniformLocation(program, 'uTexture');
+const uTrailLocation = gl.getUniformLocation(program, 'uTrail');
+const trailResolutionLocation = gl.getUniformLocation(program, 'trailResolution');
+const trailScaleLocation = gl.getUniformLocation(program, 'trailScale');
+const cursorDitherBoostLocation = gl.getUniformLocation(program, 'cursorDitherBoost');
+const timeLocation = gl.getUniformLocation(program, 'uTime');
 
 const texture = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -589,6 +628,135 @@ gl.texImage2D(
     gl.UNSIGNED_BYTE, 
     new Uint8Array([0, 0, 0, 255])
 );
+
+
+
+// --- Cursor trail mask (offscreen 2D canvas -> WebGL texture) ---
+const trailTexture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, trailTexture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+// initialize transparent
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+
+const trailCanvas = document.createElement('canvas');
+const trailCtx = trailCanvas.getContext('2d', { alpha: true });
+
+let trailW = 1, trailH = 1;
+let trailScaleX = 1, trailScaleY = 1;
+
+let cursorNDC = { x: 0.5, y: 0.5 };
+let lastCursorNDC = { x: 0.5, y: 0.5 };
+let lastMoveTime = 0;
+
+function setCursorFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+
+  // Only update when pointer is truly over the canvas
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+
+  cursorNDC.x = x;
+  cursorNDC.y = y;
+  lastMoveTime = performance.now();
+}
+
+// Track only over the canvas (matches old behavior)
+canvas.addEventListener('mousemove', setCursorFromEvent, { passive: true });
+canvas.addEventListener('mouseleave', () => { lastMoveTime = 0; }, { passive: true });
+
+// Touch support (optional)
+canvas.addEventListener('touchmove', (e) => {
+  if (!e.touches || !e.touches.length) return;
+  setCursorFromEvent(e.touches[0]);
+}, { passive: true });
+
+function resizeTrailToCanvas() {
+  const px = Math.max(1, Math.round(obj.pixelSize));
+  const gridW = Math.ceil(canvas.width / px);
+  const gridH = Math.ceil(canvas.height / px);
+
+  const maxDim = 512;
+  trailW = Math.min(maxDim, gridW);
+  trailH = Math.min(maxDim, gridH);
+
+  trailScaleX = trailW / gridW;
+  trailScaleY = trailH / gridH;
+
+  if (trailCanvas.width !== trailW || trailCanvas.height !== trailH) {
+    trailCanvas.width = trailW;
+    trailCanvas.height = trailH;
+    trailCtx.clearRect(0, 0, trailW, trailH);
+  }
+}
+
+function updateTrailMask() {
+  resizeTrailToCanvas();
+
+  const now = performance.now();
+  const dx = cursorNDC.x - lastCursorNDC.x;
+  const dy = cursorNDC.y - lastCursorNDC.y;
+  const speed = Math.sqrt(dx*dx + dy*dy);
+  const movingRecently = (now - lastMoveTime) < 120;
+
+  // Fade previous stamps (old-style decay)
+  trailCtx.globalCompositeOperation = 'destination-out';
+  trailCtx.fillStyle = `rgba(0,0,0,${movingRecently ? 0.015 : 0.02})`;
+  trailCtx.fillRect(0, 0, trailW, trailH);
+
+  // Sprinkle behind cursor only when moving (tight, few pixels)
+  if (movingRecently && speed > 0.00025) {
+    const cx = Math.floor(cursorNDC.x * trailW);
+    const cy = Math.floor(cursorNDC.y * trailH);
+
+    const dirLen = Math.max(1e-6, Math.sqrt(dx*dx + dy*dy));
+    const dirX = dx / dirLen;
+    const dirY = dy / dirLen;
+
+    // Perpendicular for small sideways jitter
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    // Very small number of candidates; sparse gate controls final count
+    const candidates = Math.floor(6 + Math.min(10, speed * 2500.0));
+    const behind = 1 + Math.min(2, speed * 700.0);
+    const sideMax = 0.02 + Math.min(0.5, speed * 5.0);
+
+    trailCtx.globalCompositeOperation = 'source-over';
+
+    for (let i = 0; i < candidates; i++) {
+      // Keep only a few real pixels (≈ 1–4)
+      if (Math.random() > 0.03) continue;
+
+      const along = -(Math.random() * behind);          // behind cursor only
+      const side = (Math.random() - 0.5) * sideMax;     // tiny lateral jitter
+
+      const x = Math.round(cx + dirX * along + perpX * side);
+      const y = Math.round(cy + dirY * along + perpY * side);
+
+      if (x < 0 || x >= trailW || y < 0 || y >= trailH) continue;
+
+      // Alpha must stay > 0.5 (shader uses step(0.5, alpha))
+      const a = 0.75 + Math.random() * 0.25;
+      trailCtx.fillStyle = `rgba(255,255,255,${a})`;
+      trailCtx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  lastCursorNDC.x = cursorNDC.x;
+  lastCursorNDC.y = cursorNDC.y;
+
+  // Upload to GPU texture unit 1
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, trailTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, trailCanvas);
+}
+
 
 // Add initialization code
 gl.clearColor(0.0, 0.0, 0.0, 1.0);
@@ -656,11 +824,20 @@ function drawScene(){
       }
 
       gl.useProgram(program);
+      gl.uniform1i(uTextureLocation, 0);
+      gl.uniform1i(uTrailLocation, 1);
+
+      // Update cursor trail mask
+      updateTrailMask();
 
       // Set uniforms
       gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
       gl.uniform1f(pixelSizeLocation, parseFloat(obj.pixelSize));
       gl.uniform1f(ditherFactorLocation, parseFloat(obj.ditherFactor));
+      gl.uniform2f(trailResolutionLocation, trailW, trailH);
+      gl.uniform2f(trailScaleLocation, trailScaleX, trailScaleY);
+      gl.uniform1f(cursorDitherBoostLocation, 1);
+      gl.uniform1f(timeLocation, performance.now() * 0.001);
       gl.uniform1f(edgeThresholdLocation, parseFloat(obj.edgeThreshold));
       gl.uniform1f(edgeIntensityLocation, parseFloat(obj.edgeIntensity));
       // Convert edge color from 0-255 range to 0-1 range for WebGL
