@@ -1,4 +1,4 @@
-// DOM Elements
+  // DOM Elements
 const canvas = document.getElementById('canvas');
 const gl = canvas.getContext('webgl', {preserveDrawingBuffer: false}) || canvas.getContext('experimental-webgl');
 const fileInput = document.getElementById('fileInput');
@@ -12,8 +12,13 @@ console.log("Mobile?: "+isMobileFlag);
 
 let userVideo = document.getElementById('userVideo');
 let defaultVideo = document.getElementById('defaultVideo');
+let defaultVideo2 = document.getElementById('defaultVideo2');
 let defaultVideoWidth = 900;
 let defaultVideoHeight = 504;
+
+// Default video variant selection (random on page load)
+let selectedDefaultVideo = null;
+let selectedDefaultPalette = 'acid';
 let maxCanvasWidth = 1200;
 
 
@@ -95,28 +100,28 @@ customContainer.appendChild(gui.domElement);
 // Define color palettes
 const palettes = {
     0: [
-        [0.950, 0.950, 0.950], // White clouds
-        [0.529, 0.808, 0.922], // Sky blue
-        [0.275, 0.510, 0.706], // Dark blue
-        [0.463, 0.635, 0.439], // Forest green
-        [0.322, 0.424, 0.314], // Dark green
-        [0.957, 0.843, 0.647], // Wheat yellow
-        [0.839, 0.678, 0.427], // Dark wheat
-        [0.682, 0.506, 0.427], // Brown
-        [0.408, 0.302, 0.294], // Dark brown
-        [0.216, 0.216, 0.216]  // Shadow
+        [0.031, 0.302, 0.969], // #084DF7 - Bright blue
+        [0.031, 0.196, 0.627], // #0532A0 - Dark blue
+        [0.063, 0.365, 0.788], // #105DC9 - Medium blue
+        [0.600, 0.600, 0.620], // #99999E - Light medium grey
+        [1.000, 1.000, 1.000], // #ffffff - Pure White
+        [0.933, 0.929, 0.957], // #EEEDF4 - Very light gray
+        [0.984, 0.886, 0.588], // #FBE296 - Light yellow
+        [0.902, 0.380, 0.863], // #E661DC - Bright pink (accent)
+        [1.000, 0.875, 1.000], // #FFDEFF - Very light pink
+        [0.120, 0.120, 0.140], // #1E1E24 - Very dark grey
     ],
     1: [
-        [0.118, 0.471, 0.706], // Deep blue
-        [0.173, 0.612, 0.620], // Teal
-        [0.255, 0.757, 0.678], // Light teal
-        [1.000, 0.412, 0.380], // Coral red
-        [0.957, 0.643, 0.376], // Coral orange
-        [0.824, 0.369, 0.584], // Purple coral
-        [0.467, 0.745, 0.851], // Light blue
-        [0.298, 0.180, 0.247], // Deep purple
-        [0.925, 0.941, 0.945], // White
-        [0.078, 0.110, 0.141]  // Dark blue
+        [0.031, 0.027, 0.035],  // Deep black
+        [0.157, 0.118, 0.196],  // Dark purple
+        [0.235, 0.392, 0.902],  // Bright blue
+        [0.431, 0.314, 0.784],  // Medium purple
+        [0.902, 0.431, 0.784],  // Bright pink
+        [0.980, 0.549, 0.902],  // Light pink
+        [0.196, 0.784, 0.314],  // Bright green
+        [0.980, 0.784, 0.196],  // Yellow/orange
+        [0.902, 0.902, 0.980],  // Light blue/white
+        [1.000, 1.000, 1.000]   // Pure white highlights
     ],
     2: [
         [0.133, 0.184, 0.133], // Dark green
@@ -730,7 +735,6 @@ function updateTrailMask() {
     trailCtx.globalCompositeOperation = 'source-over';
 
     for (let i = 0; i < candidates; i++) {
-      // Keep only a few real pixels (≈ 1–4)
       if (Math.random() > 0.03) continue;
 
       const along = -(Math.random() * behind);          // behind cursor only
@@ -769,7 +773,6 @@ async function setupWebcam() {
     video.setAttribute('playsinline', '');  // Required for iOS
     video.setAttribute('webkit-playsinline', '');
     video.setAttribute('autoplay', '');
-    // video.style.transform = 'scaleX(-1)';  // Mirror the video
   }
 
   try {
@@ -819,7 +822,6 @@ function drawScene(){
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, currentVideo);
       } catch (e) {
           console.error('Error updating texture:', e);
-          // animationRequest = requestAnimationFrame(() => render(video));
           return;
       }
 
@@ -840,6 +842,7 @@ function drawScene(){
       gl.uniform1f(timeLocation, performance.now() * 0.001);
       gl.uniform1f(edgeThresholdLocation, parseFloat(obj.edgeThreshold));
       gl.uniform1f(edgeIntensityLocation, parseFloat(obj.edgeIntensity));
+
       // Convert edge color from 0-255 range to 0-1 range for WebGL
       gl.uniform3f(edgeColorLocation, 
           obj.edgeColor[0] / 255.0,
@@ -885,14 +888,38 @@ function useWebcam(){
   setupWebcam().then(video => {
       currentVideo = video;
       animationPlayToggle = true;
-      // animationRequest = render(video);
       render();
   }).catch(err => {
       console.error('Failed to start webcam:', err);
   });
 }
 
+
+function selectRandomDefaultVideo() {
+  // Prefer crypto RNG when available
+  let r = Math.random();
+  if (window.crypto && window.crypto.getRandomValues) {
+    const buf = new Uint32Array(1);
+    window.crypto.getRandomValues(buf);
+    r = buf[0] / 0xFFFFFFFF;
+  }
+
+  const useSecond = (r >= 0.5);
+
+  if (useSecond && defaultVideo2) {
+    selectedDefaultVideo = defaultVideo2;
+    selectedDefaultPalette = 'field';
+  } else {
+    selectedDefaultVideo = defaultVideo;
+    selectedDefaultPalette = 'acid';
+  }
+
+  // Ensure first frame uses the correct palette
+  obj.colorPalette = selectedDefaultPalette;
+}
+
 function startDefaultVideo(){
+  if (!selectedDefaultVideo) selectRandomDefaultVideo();
   if(animationPlayToggle==true){
       playAnimationToggle = false;
       cancelAnimationFrame(animationRequest);
@@ -904,13 +931,13 @@ function startDefaultVideo(){
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
 
-  defaultVideo.play();
+  selectedDefaultVideo.play();
 
   gl.viewport(0, 0, canvas.width, canvas.height);
   applyCanvasCover();
   playAnimationToggle = true;
 
-  currentVideo = defaultVideo;
+  currentVideo = selectedDefaultVideo;
   render();
 }
 
@@ -920,7 +947,6 @@ function toggleAnimationPlay(){
     cancelAnimationFrame(animationRequest);
   } else {
     currentVideo.play();
-    // animationRequest = render(currentVideo);
     render();
   }
   animationPlayToggle = !animationPlayToggle;
@@ -968,4 +994,5 @@ function randomizeInputs(){
 
 //MAIN METHOD
 applyCanvasCover();
-setInterval(startDefaultVideo(),1000);
+selectRandomDefaultVideo();
+startDefaultVideo();

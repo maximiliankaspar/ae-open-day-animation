@@ -58,8 +58,8 @@ html, body {
 .container {
     position: relative;
     display: flex;
-    justify-content: center;   /* horizontal centering */
-    align-items: flex-start;   /* top alignment */
+    justify-content: center;
+    align-items: flex-start;
     width: 100vw;
     height: 100vh;
     overflow: hidden;
@@ -111,66 +111,10 @@ li {
     margin-bottom: 6px;
 }
 
-h2 {
-    font-size: 40px;
-    font-family: Helvetica;
-}
-
-#videoRecordingMessageDiv{
-    background: rgba(0, 0, 0, 0.85);
-    color: white;
-    font-family: helvetica;
-    font-size: 18px;
-    font-weight: bold;
-    padding: 15px;
-    text-align: center;
-    z-index: 9;
-}
-
 .hidden {
     display: none !important;
 }
 
-.sticky-bottom {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-}
-
-/* Styling for table with github and social links */
-
-#infoMenuTable td {
-    text-align:center;
-    border: 0;
-    padding: 20px;
-}
-
-#infoMenuTable{
-    table-layout: fixed;
-    margin: 0px;
-}
-
-a, a:visited{
-    color:rgb(161, 50, 154);
-}
-
-.socialMediaButton{
-    color:rgb(161, 50, 154);
-    font-size: 26px;
-    margin: 0;
-    padding: 4px;
-    border: none;
-    max-width: 50px;
-    max-height: 50px;
-    background-color: transparent;
-}
-
-#buyMeACoffeeButton {
-    font-size: 10px;
-}
-
-/* Styling for image upload field */
 input, select {
     cursor: pointer;
 }
